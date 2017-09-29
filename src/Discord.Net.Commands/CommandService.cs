@@ -93,8 +93,10 @@ namespace Discord.Commands
             }
         }
         public Task<ModuleInfo> AddModuleAsync<T>() => AddModuleAsync(typeof(T));
-        public async Task<ModuleInfo> AddModuleAsync(Type type)
+        public async Task<ModuleInfo> AddModuleAsync(Type type, IServiceProvider services = null)
         {
+            services = services ?? EmptyServiceProvider.Instance;
+
             await _moduleLock.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -103,7 +105,7 @@ namespace Discord.Commands
                 if (_typedModuleDefs.ContainsKey(type))
                     throw new ArgumentException($"This module has already been added.");
 
-                var module = (await ModuleClassBuilder.BuildAsync(this, typeInfo).ConfigureAwait(false)).FirstOrDefault();
+                var module = (await ModuleClassBuilder.BuildAsync(this, services, typeInfo).ConfigureAwait(false)).FirstOrDefault();
 
                 if (module.Value == default(ModuleInfo))
                     throw new InvalidOperationException($"Could not build the module {type.FullName}, did you pass an invalid type?");
@@ -117,13 +119,15 @@ namespace Discord.Commands
                 _moduleLock.Release();
             }
         }
-        public async Task<IEnumerable<ModuleInfo>> AddModulesAsync(Assembly assembly)
+        public async Task<IEnumerable<ModuleInfo>> AddModulesAsync(Assembly assembly, IServiceProvider services = null)
         {
+            services = services ?? EmptyServiceProvider.Instance;
+
             await _moduleLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 var types = await ModuleClassBuilder.SearchAsync(assembly, this).ConfigureAwait(false);
-                var moduleDefs = await ModuleClassBuilder.BuildAsync(types, this).ConfigureAwait(false);
+                var moduleDefs = await ModuleClassBuilder.BuildAsync(types, this, services).ConfigureAwait(false);
 
                 foreach (var info in moduleDefs)
                 {

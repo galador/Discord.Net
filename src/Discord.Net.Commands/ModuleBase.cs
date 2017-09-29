@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
+using Discord.Commands.Builders;
 
 namespace Discord.Commands
 {
@@ -23,6 +24,10 @@ namespace Discord.Commands
         {
         }
 
+        protected virtual void OnModuleBuilding(ModuleBuilder moduleBuilder)
+        {
+        }
+
         //IModuleBase
         void IModuleBase.SetContext(ICommandContext context)
         {
@@ -31,7 +36,8 @@ namespace Discord.Commands
         }
 
         void IModuleBase.BeforeExecute(CommandInfo command) => BeforeExecute(command);
-
         void IModuleBase.AfterExecute(CommandInfo command) => AfterExecute(command);
+
+        void IModuleBase.OnModuleBuilding(ModuleBuilder moduleBuilder) => OnModuleBuilding(moduleBuilder);
     }
 }

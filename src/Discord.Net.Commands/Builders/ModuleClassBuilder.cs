@@ -42,8 +42,8 @@ namespace Discord.Commands
         }
 
 
-        public static Task<Dictionary<Type, ModuleInfo>> BuildAsync(CommandService service, params TypeInfo[] validTypes) => BuildAsync(validTypes, service);
-        public static async Task<Dictionary<Type, ModuleInfo>> BuildAsync(IEnumerable<TypeInfo> validTypes, CommandService service)
+        public static Task<Dictionary<Type, ModuleInfo>> BuildAsync(CommandService service, IServiceProvider services, params TypeInfo[] validTypes) => BuildAsync(validTypes, service, services);
+        public static async Task<Dictionary<Type, ModuleInfo>> BuildAsync(IEnumerable<TypeInfo> validTypes, CommandService service, IServiceProvider services)
         {
             /*if (!validTypes.Any())
                 throw new InvalidOperationException("Could not find any valid modules from the given selection");*/
@@ -63,8 +63,8 @@ namespace Discord.Commands
 
                 var module = new ModuleBuilder(service, null);
 
-                BuildModule(module, typeInfo, service);
-                BuildSubTypes(module, typeInfo.DeclaredNestedTypes, builtTypes, service);
+                BuildModule(module, typeInfo, service, services);
+                BuildSubTypes(module, typeInfo.DeclaredNestedTypes, builtTypes, service, services);
                 builtTypes.Add(typeInfo);
 
                 result[typeInfo.AsType()] = module.Build(service);
@@ -75,7 +75,7 @@ namespace Discord.Commands
             return result;
         }
 
-        private static void BuildSubTypes(ModuleBuilder builder, IEnumerable<TypeInfo> subTypes, List<TypeInfo> builtTypes, CommandService service)
+        private static void BuildSubTypes(ModuleBuilder builder, IEnumerable<TypeInfo> subTypes, List<TypeInfo> builtTypes, CommandService service, IServiceProvider services)
         {
             foreach (var typeInfo in subTypes)
             {
@@ -87,15 +87,15 @@ namespace Discord.Commands
                 
                 builder.AddModule((module) => 
                 {
-                    BuildModule(module, typeInfo, service);
-                    BuildSubTypes(module, typeInfo.DeclaredNestedTypes, builtTypes, service);
+                    BuildModule(module, typeInfo, service, services);
+                    BuildSubTypes(module, typeInfo.DeclaredNestedTypes, builtTypes, service, services);
                 });
 
                 builtTypes.Add(typeInfo);
             }
         }
 
-        private static void BuildModule(ModuleBuilder builder, TypeInfo typeInfo, CommandService service)
+        private static void BuildModule(ModuleBuilder builder, TypeInfo typeInfo, CommandService service, IServiceProvider services)
         {
             var attributes = typeInfo.GetCustomAttributes();
 
@@ -135,17 +135,21 @@ namespace Discord.Commands
                 builder.Name = typeInfo.Name;
 
             var validCommands = typeInfo.DeclaredMethods.Where(x => IsValidCommandDefinition(x));
+            var createInstance = ReflectionUtils.CreateBuilder<IModuleBase>(typeInfo, service);
 
             foreach (var method in validCommands)
             {
                 builder.AddCommand((command) => 
                 {
-                    BuildCommand(command, typeInfo, method, service);
+                    BuildCommand(command, typeInfo, method, service, createInstance);
                 });
             }
+
+            var instance = createInstance(services);
+            instance.OnModuleBuilding(builder);
         }
 
-        private static void BuildCommand(CommandBuilder builder, TypeInfo typeInfo, MethodInfo method, CommandService service)
+        private static void BuildCommand(CommandBuilder builder, TypeInfo typeInfo, MethodInfo method, CommandService service, Func<IServiceProvider, IModuleBase> createInstance)
         {
             var attributes = method.GetCustomAttributes();
             
@@ -194,8 +198,6 @@ namespace Discord.Commands
                     BuildParameter(parameter, paramInfo, pos++, count, service);
                 });
             }
-
-            var createInstance = ReflectionUtils.CreateBuilder<IModuleBase>(typeInfo, service);
 
             async Task<IResult> ExecuteCallback(ICommandContext context, object[] args, IServiceProvider services, CommandInfo cmd)
             {
